@@ -7,6 +7,11 @@ import requests, feedparser
 from datetime import datetime, timedelta, timezone
 from dateutil import parser as dtparse
 import random
+from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+def add_utm(url, source="facebook", medium="social", campaign="market_news", content="auto"):
+    p = urlparse(url); q = dict(parse_qsl(p.query))
+    q.update({"utm_source": source, "utm_medium": medium, "utm_campaign": campaign, "utm_content": content})
+    return urlunparse(p._replace(query=urlencode(q)))
 
 CTA_LINKS = [
     "👉 AP Trading Tools: https://www.aptradingtools.com",
@@ -75,28 +80,22 @@ URL_RE = re.compile(r'https?://\S+')
 
 def post_to_facebook(message: str):
     endpoint = f"https://graph.facebook.com/v20.0/{PAGE_ID}/feed"
-
-    # Append CTA line
     try:
         message = f"{message}\n\n{pick_cta()}"
     except NameError:
-        pass  # if pick_cta() isn't defined yet, just post the original message
-
-    # Build payload
+        pass
+    m = re.search(r'https?://\S+', message)
     data = {"message": message, "access_token": TOKEN}
-
-    # If the message contains a URL, also send it as 'link' for better preview
-    m = URL_RE.search(message)
     if m:
-        url = m.group(0).rstrip(').,;')
-        data["link"] = url
-
+        raw = m.group(0).rstrip(').,;')
+        url = add_utm(raw)                 # add tracking
+        data["link"] = url                 # preview card uses UTM link
+        message = message.replace(raw, url, 1)
+        data["message"] = message
     resp = requests.post(endpoint, data=data, timeout=30)
     if resp.ok:
-        print("[OK] Posted:", resp.json())
-        return True
-    print("[ERR]", resp.status_code, resp.text)
-    return False
+        print("[OK] Posted:", resp.json()); return True
+    print("[ERR]", resp.status_code, resp.text); return False
 
 def main():
     items = pick_items(max_items=3)  # change to 1 if you want only one post per run
