@@ -1,0 +1,25 @@
+name: FB Market News
+
+on:
+  schedule:
+    - cron: '0 8,16 * * *'   # twice daily at 08:00 & 16:00 UTC
+  workflow_dispatch: {}      # allow manual run
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests feedparser python-dateutil
+      - name: Post news to Facebook
+        env:
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+        run: |
+          python scripts/post_news.py
