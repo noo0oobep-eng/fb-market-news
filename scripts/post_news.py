@@ -1,63 +1,87 @@
 # scripts/post_news.py
-import os, time, requests, feedparser
-from datetime import datetime, timezone
+# Posts fresh market headlines to a Facebook Page.
+# Needs env vars: FB_PAGE_ID, FB_PAGE_ACCESS_TOKEN
 
-FB_USER_TOKEN = os.environ["FB_USER_TOKEN"]
-FB_PAGE_ID    = os.environ["FB_PAGE_ID"]
-API_VER       = "v23.0"
+import os, sys, time, requests, feedparser
+from datetime import datetime, timedelta, timezone
+from dateutil import parser as dtparse
+
+PAGE_ID = os.getenv("FB_PAGE_ID")
+TOKEN = os.getenv("FB_PAGE_ACCESS_TOKEN")
+
+if not PAGE_ID or not TOKEN:
+    print("Missing FB_PAGE_ID or FB_PAGE_ACCESS_TOKEN env vars.", file=sys.stderr)
+    sys.exit(1)
 
 FEEDS = [
-    "https://feeds.reuters.com/reuters/businessNews",
-    "https://feeds.reuters.com/reuters/marketsNews",
-    "https://www.coindesk.com/arc/outboundfeeds/rss/"
+    # Markets / Business
+    "https://www.reuters.com/finance/markets/rss",
+    "https://www.cnbc.com/id/100003114/device/rss/rss.html",  # Top news & analysis
+    # Forex
+    "https://www.dailyfx.com/feeds/market-news",              # Forex news
+    # Crypto
+    "https://www.coindesk.com/arc/outboundfeeds/rss/?outputType=xml",
 ]
 
-def get_page_token(user_token, page_id):
-    url = f"https://graph.facebook.com/{API_VER}/me/accounts"
-    r = requests.get(url, params={"access_token": user_token}, timeout=30)
-    r.raise_for_status()
-    for pg in r.json().get("data", []):
-        if pg.get("id") == page_id:
-            return pg.get("access_token")
-    raise SystemExit("Could not find Page access token. Is this user an admin of the Page?")
+HASHTAGS = "#markets #stocks #forex #crypto #trading"
 
-def collect_headlines(max_items=3):
-    seen = set()
-    items = []
-    for feed in FEEDS:
-        d = feedparser.parse(feed)
-        for e in d.entries[:6]:
-            title = e.get("title", "").strip()
-            link  = e.get("link", "").strip()
-            if not title or not link or link in seen: 
-                continue
-            seen.add(link)
-            # Use published time if available
-            ts = None
-            if "published_parsed" in e and e.published_parsed:
-                ts = datetime.fromtimestamp(time.mktime(e.published_parsed), tz=timezone.utc)
-            items.append({"title": title, "link": link, "ts": ts})
-    # newest first when we have timestamps
-    items.sort(key=lambda x: x["ts"] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
-    return items[:max_items]
+# consider items in the last 24h
+NOW = datetime.now(timezone.utc)
+CUTOFF = NOW - timedelta(hours=24)
 
-def post_to_page(page_token, page_id, title, link):
-    url = f"https://graph.facebook.com/{API_VER}/{page_id}/feed"
-    message = f"{title}\n\n{link}\n\n#markets #forex #stocks #crypto"
-    r = requests.post(url, data={"message": message, "access_token": page_token}, timeout=30)
-    if r.status_code != 200:
-        raise SystemExit(f"Post failed: {r.status_code} {r.text}")
-    print("Posted:", r.json())
+def is_recent(entry):
+    # Try published/updated dates; fall back to now if missing
+    for key in ("published", "updated", "pubDate"):
+        val = getattr(entry, key, None) or entry.get(key)
+        if val:
+            try:
+                dt = dtparse.parse(val)
+                if not dt.tzinfo:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt >= CUTOFF
+            except Exception:
+                pass
+    return True  # if no date, assume recent
+
+def pick_items(max_items=3):
+    picked = []
+    for url in FEEDS:
+        try:
+            feed = feedparser.parse(url)
+            for entry in feed.entries[:10]:
+                if is_recent(entry):
+                    title = getattr(entry, "title", "").strip()
+                    link = getattr(entry, "link", "").strip()
+                    if title and link and not any(link == x["link"] for x in picked):
+                        picked.append({"title": title, "link": link})
+                        break  # take only the first fresh item from this feed
+        except Exception as e:
+            print(f"[WARN] Failed to read feed {url}: {e}")
+        if len(picked) >= max_items:
+            break
+    return picked
+
+def post_to_facebook(message: str):
+    endpoint = f"https://graph.facebook.com/v20.0/{PAGE_ID}/feed"
+    resp = requests.post(endpoint, data={"message": message, "access_token": TOKEN}, timeout=30)
+    if resp.ok:
+        print("[OK] Posted:", resp.json())
+        return True
+    print("[ERR]", resp.status_code, resp.text)
+    return False
 
 def main():
-    page_token = get_page_token(FB_USER_TOKEN, FB_PAGE_ID)
-    headlines = collect_headlines(max_items=2)  # post 2 items per run
-    if not headlines:
-        print("No headlines found.")
+    items = pick_items(max_items=3)
+    if not items:
+        print("No fresh items found.")
         return
-    for h in headlines:
-        post_to_page(page_token, FB_PAGE_ID, h["title"], h["link"])
-        time.sleep(5)  # tiny pause between posts
+
+    for idx, it in enumerate(items, start=1):
+        msg = f"{it['title']}\n{it['link']}\n\n{HASHTAGS}"
+        print(f"Posting {idx}/{len(items)}: {it['title']}")
+        post_to_facebook(msg)
+        # Small pause to avoid rate-bursting
+        time.sleep(3)
 
 if __name__ == "__main__":
     main()
