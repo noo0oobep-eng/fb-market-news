@@ -70,6 +70,10 @@ def pick_items(max_items=3):
 
 def post_to_facebook(message: str):
     endpoint = f"https://graph.facebook.com/v20.0/{PAGE_ID}/feed"
+    try:
+        message = f"{message}\n\n{pick_cta()}"  # <-- add CTA line
+    except NameError:
+        pass  # if pick_cta() isn't defined yet, just post the original message
     resp = requests.post(endpoint, data={"message": message, "access_token": TOKEN}, timeout=30)
     if resp.ok:
         print("[OK] Posted:", resp.json())
