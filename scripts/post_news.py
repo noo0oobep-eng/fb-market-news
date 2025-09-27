@@ -5,6 +5,13 @@
 import os, sys, time, requests, feedparser
 from datetime import datetime, timedelta, timezone
 from dateutil import parser as dtparse
+import random
+CTA_LINKS = [
+    "👉 MQL5: https://your-mql5-seller-or-product-url",
+    "👉 Gumroad: https://your-gumroad-landing-url",
+]
+def pick_cta():
+    return random.choice(CTA_LINKS)
 
 PAGE_ID = os.getenv("FB_PAGE_ID")
 TOKEN = os.getenv("FB_PAGE_ACCESS_TOKEN")
