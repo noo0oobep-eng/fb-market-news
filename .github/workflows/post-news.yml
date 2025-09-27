@@ -1,0 +1,21 @@
+name: Post market news
+
+on:
+  schedule:
+    - cron: "0 9,17 * * *"   # Runs 09:00 and 17:00 UTC daily
+  workflow_dispatch:         # Lets you run it manually
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests feedparser python-dateutil
+      - name: Post to Facebook
+        run: python scripts/post_news.py
+        env:
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
