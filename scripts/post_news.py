@@ -7,8 +7,8 @@ from datetime import datetime, timedelta, timezone
 from dateutil import parser as dtparse
 import random
 CTA_LINKS = [
-    "👉 MQL5: https://your-mql5-seller-or-product-url",
-    "👉 Gumroad: https://your-gumroad-landing-url",
+    "👉 AP Trading Tools: https://www.aptradingtools.com",
+    "👉 Gumroad: https://aptradingtools.gumroad.com/",
 ]
 def pick_cta():
     return random.choice(CTA_LINKS)
