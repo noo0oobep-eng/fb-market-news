@@ -2,10 +2,12 @@
 # Posts fresh market headlines to a Facebook Page.
 # Needs env vars: FB_PAGE_ID, FB_PAGE_ACCESS_TOKEN
 
-import os, sys, time, requests, feedparser
+import os, sys, time, re
+import requests, feedparser
 from datetime import datetime, timedelta, timezone
 from dateutil import parser as dtparse
 import random
+
 CTA_LINKS = [
     "👉 AP Trading Tools: https://www.aptradingtools.com",
     "👉 Gumroad: https://aptradingtools.gumroad.com/",
@@ -39,7 +41,7 @@ CUTOFF = NOW - timedelta(hours=24)
 def is_recent(entry):
     # Try published/updated dates; fall back to now if missing
     for key in ("published", "updated", "pubDate"):
-        val = getattr(entry, key, None) or entry.get(key)
+        val = getattr(entry, key, None) or (entry.get(key) if isinstance(entry, dict) else None)
         if val:
             try:
                 dt = dtparse.parse(val)
@@ -68,13 +70,28 @@ def pick_items(max_items=3):
             break
     return picked
 
+# Use first URL in message to improve preview/unfurl
+URL_RE = re.compile(r'https?://\S+')
+
 def post_to_facebook(message: str):
     endpoint = f"https://graph.facebook.com/v20.0/{PAGE_ID}/feed"
+
+    # Append CTA line
     try:
-        message = f"{message}\n\n{pick_cta()}"  # <-- add CTA line
+        message = f"{message}\n\n{pick_cta()}"
     except NameError:
         pass  # if pick_cta() isn't defined yet, just post the original message
-    resp = requests.post(endpoint, data={"message": message, "access_token": TOKEN}, timeout=30)
+
+    # Build payload
+    data = {"message": message, "access_token": TOKEN}
+
+    # If the message contains a URL, also send it as 'link' for better preview
+    m = URL_RE.search(message)
+    if m:
+        url = m.group(0).rstrip(').,;')
+        data["link"] = url
+
+    resp = requests.post(endpoint, data=data, timeout=30)
     if resp.ok:
         print("[OK] Posted:", resp.json())
         return True
@@ -82,7 +99,7 @@ def post_to_facebook(message: str):
     return False
 
 def main():
-    items = pick_items(max_items=3)
+    items = pick_items(max_items=3)  # change to 1 if you want only one post per run
     if not items:
         print("No fresh items found.")
         return
