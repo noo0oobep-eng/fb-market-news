@@ -14,8 +14,8 @@ def add_utm(url, source="facebook", medium="social", campaign="market_news", con
     return urlunparse(p._replace(query=urlencode(q)))
 
 CTA_LINKS = [
-    "👉 AP Trading Tools: https://www.aptradingtools.com",
-    "👉 Gumroad: https://aptradingtools.gumroad.com/",
+    "👉 Buy Oil Navigator Pro: https://buy.stripe.com/7sY4gBfCw1Wb9yz0jhdjO00",
+    "👉 More tools & docs: https://www.aptradingtools.com/?utm_source=fb&utm_medium=post"
 ]
 def pick_cta():
     return random.choice(CTA_LINKS)
